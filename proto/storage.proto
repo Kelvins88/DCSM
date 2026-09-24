@@ -8,10 +8,11 @@ service Storage {
 }
 
 message UploadRequest {
-  string username = 1;
-  string filename = 2;
-  bytes content = 3;
-  string label = 4;
+  string token = 1;
+  string username = 2;
+  string filename = 3;
+  bytes content = 4;
+  string label = 5;
 }
 
 message UploadReply {
@@ -21,8 +22,9 @@ message UploadReply {
 }
 
 message DownloadRequest {
-  string username = 1;
-  string filename = 2;
+  string token = 1;
+  string username = 2;
+  string filename = 3;
 }
 
 message DownloadReply {
@@ -33,7 +35,8 @@ message DownloadReply {
 }
 
 message ListRequest {
-  string username = 1;
+  string token = 1;
+  string username = 2;
 }
 
 message FileInfo {
@@ -48,8 +51,9 @@ message ListReply {
 }
 
 message DeleteRequest {
-  string username = 1;
-  string filename = 2;
+  string token = 1;
+  string username = 2;
+  string filename = 3;
 }
 
 message DeleteReply {

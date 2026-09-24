@@ -1,0 +1,17 @@
+{
+  "admin1": {
+    "token": "token-admin-123",
+    "role": "admin",
+    "clearance": "Secret"
+  },
+  "budi": {
+    "token": "token-budi-456",
+    "role": "staff",
+    "clearance": "Confidential"
+  },
+  "citra": {
+    "token": "token-citra-789",
+    "role": "guest",
+    "clearance": "Public"
+  }
+}

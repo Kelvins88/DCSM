@@ -4,3 +4,4 @@ __pycache__/
 data/
 certs/*.key
 certs/*.pem
+audit_log.jsonl

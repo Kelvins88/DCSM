@@ -4,12 +4,27 @@ import sys
 import storage_pb2
 import storage_pb2_grpc
 
-TARGET = "localhost:50052"  # arahkan ke GATEWAY, bukan storage langsung
+TARGET = "localhost:50052"
+
+# Simulasi "kartu identitas" tiap user, cocokkan dengan users.json di Gateway
+TOKENS = {
+    "admin1": "token-admin-123",
+    "budi": "token-budi-456",
+    "citra": "token-citra-789",
+}
 
 
 def get_stub():
     channel = grpc.insecure_channel(TARGET)
     return storage_pb2_grpc.StorageStub(channel)
+
+
+def get_token(username):
+    token = TOKENS.get(username)
+    if token is None:
+        print(f"User '{username}' tidak dikenal di sisi client (cek TOKENS)")
+        sys.exit(1)
+    return token
 
 
 def do_upload(username, filepath, label):
@@ -19,6 +34,7 @@ def do_upload(username, filepath, label):
     filename = filepath.split("/")[-1].split("\\")[-1]
     stub = get_stub()
     reply = stub.Upload(storage_pb2.UploadRequest(
+        token=get_token(username),
         username=username,
         filename=filename,
         content=content,
@@ -26,12 +42,14 @@ def do_upload(username, filepath, label):
     ))
     print("Success:", reply.success)
     print("Message:", reply.message)
-    print("Checksum:", reply.checksum)
+    if reply.checksum:
+        print("Checksum:", reply.checksum)
 
 
 def do_download(username, filename):
     stub = get_stub()
     reply = stub.Download(storage_pb2.DownloadRequest(
+        token=get_token(username),
         username=username,
         filename=filename,
     ))
@@ -47,9 +65,12 @@ def do_download(username, filename):
 
 def do_list(username):
     stub = get_stub()
-    reply = stub.List(storage_pb2.ListRequest(username=username))
+    reply = stub.List(storage_pb2.ListRequest(
+        token=get_token(username),
+        username=username,
+    ))
     if not reply.files:
-        print("(kosong)")
+        print("(kosong atau tidak diizinkan)")
     for f in reply.files:
         print(f"{f.filename:25} | {f.label:12} | owner={f.owner} | {f.checksum[:16]}...")
 
@@ -57,6 +78,7 @@ def do_list(username):
 def do_delete(username, filename):
     stub = get_stub()
     reply = stub.Delete(storage_pb2.DeleteRequest(
+        token=get_token(username),
         username=username,
         filename=filename,
     ))

@@ -6,6 +6,7 @@ from concurrent import futures
 
 import storage_pb2
 import storage_pb2_grpc
+import policy
 
 DATA_DIR = os.environ.get("DATA_DIR", "./data")
 META_FILE = os.path.join(DATA_DIR, "metadata.json")
@@ -35,6 +36,12 @@ def sha256_bytes(data):
 class GatewayServicer(storage_pb2_grpc.StorageServicer):
 
     def Upload(self, request, context):
+        allowed, username, reason = policy.authorize(
+            request.token, "upload", request.filename, request.label
+        )
+        if not allowed:
+            return storage_pb2.UploadReply(success=False, message=f"Ditolak: {reason}")
+
         path = os.path.join(DATA_DIR, "files", request.filename)
         with open(path, "wb") as f:
             f.write(request.content)
@@ -45,19 +52,27 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
         meta[request.filename] = {
             "label": request.label or "Public",
             "checksum": checksum,
-            "owner": request.username,
+            "owner": username,
         }
         save_meta(meta)
 
-        print(f"[UPLOAD] {request.filename} by {request.username} label={request.label} sha256={checksum[:16]}...")
+        print(f"[UPLOAD] {request.filename} by {username} label={request.label} sha256={checksum[:16]}...")
         return storage_pb2.UploadReply(
             success=True,
-            message="File tersimpan di Gateway (sementara, belum ke Storage Node)",
+            message="File tersimpan",
             checksum=checksum,
         )
 
     def Download(self, request, context):
         meta = load_meta()
+        file_label = meta.get(request.filename, {}).get("label")
+
+        allowed, username, reason = policy.authorize(
+            request.token, "download", request.filename, file_label
+        )
+        if not allowed:
+            return storage_pb2.DownloadReply(success=False, message=f"Ditolak: {reason}")
+
         if request.filename not in meta:
             return storage_pb2.DownloadReply(success=False, message="File tidak ditemukan")
 
@@ -78,7 +93,7 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
                 message="Integritas file rusak: SHA-256 tidak cocok",
             )
 
-        print(f"[DOWNLOAD] {request.filename} by {request.username}")
+        print(f"[DOWNLOAD] {request.filename} by {username}")
         return storage_pb2.DownloadReply(
             success=True,
             message="OK",
@@ -87,6 +102,10 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
         )
 
     def List(self, request, context):
+        allowed, username, reason = policy.authorize(request.token, "list")
+        if not allowed:
+            return storage_pb2.ListReply()
+
         meta = load_meta()
         files = [
             storage_pb2.FileInfo(
@@ -101,6 +120,14 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
 
     def Delete(self, request, context):
         meta = load_meta()
+        file_label = meta.get(request.filename, {}).get("label")
+
+        allowed, username, reason = policy.authorize(
+            request.token, "delete", request.filename, file_label
+        )
+        if not allowed:
+            return storage_pb2.DeleteReply(success=False, message=f"Ditolak: {reason}")
+
         if request.filename not in meta:
             return storage_pb2.DeleteReply(success=False, message="File tidak ditemukan")
 
@@ -111,7 +138,7 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
         del meta[request.filename]
         save_meta(meta)
 
-        print(f"[DELETE] {request.filename} by {request.username}")
+        print(f"[DELETE] {request.filename} by {username}")
         return storage_pb2.DeleteReply(success=True, message="File dihapus")
 
 
