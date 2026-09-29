@@ -28,12 +28,16 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
 
     def Download(self, request, context):
         list_reply = storage_client.list_from_storage(request.token, request.username)
+
+        if list_reply is None:
+            print(f"[DOWNLOAD BLOCKED] {request.filename} by {request.username}: Storage tidak dapat dihubungi, request ditolak")
+            return storage_pb2.DownloadReply(success=False, message="Storage Node tidak dapat dihubungi, permintaan ditolak")
+
         file_label = None
-        if list_reply is not None:
-            for f in list_reply.files:
-                if f.filename == request.filename:
-                    file_label = f.label
-                    break
+        for f in list_reply.files:
+            if f.filename == request.filename:
+                file_label = f.label
+                break
 
         allowed, username, reason = policy.authorize(
             request.token, "download", request.filename, file_label
@@ -60,12 +64,16 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
 
     def Delete(self, request, context):
         list_reply = storage_client.list_from_storage(request.token, request.username)
+
+        if list_reply is None:
+            print(f"[DELETE BLOCKED] {request.filename} by {request.username}: Storage tidak dapat dihubungi, request ditolak")
+            return storage_pb2.DeleteReply(success=False, message="Storage Node tidak dapat dihubungi, permintaan ditolak")
+
         file_label = None
-        if list_reply is not None:
-            for f in list_reply.files:
-                if f.filename == request.filename:
-                    file_label = f.label
-                    break
+        for f in list_reply.files:
+            if f.filename == request.filename:
+                file_label = f.label
+                break
 
         allowed, username, reason = policy.authorize(
             request.token, "delete", request.filename, file_label
