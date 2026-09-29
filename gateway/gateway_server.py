@@ -1,36 +1,11 @@
 import grpc
 import os
-import json
-import hashlib
 from concurrent import futures
 
 import storage_pb2
 import storage_pb2_grpc
 import policy
-
-DATA_DIR = os.environ.get("DATA_DIR", "./data")
-META_FILE = os.path.join(DATA_DIR, "metadata.json")
-
-
-def ensure_dirs():
-    os.makedirs(os.path.join(DATA_DIR, "files"), exist_ok=True)
-    if not os.path.exists(META_FILE):
-        with open(META_FILE, "w") as f:
-            json.dump({}, f)
-
-
-def load_meta():
-    with open(META_FILE, "r") as f:
-        return json.load(f)
-
-
-def save_meta(meta):
-    with open(META_FILE, "w") as f:
-        json.dump(meta, f, indent=2)
-
-
-def sha256_bytes(data):
-    return hashlib.sha256(data).hexdigest()
+import storage_client
 
 
 class GatewayServicer(storage_pb2_grpc.StorageServicer):
@@ -42,30 +17,23 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
         if not allowed:
             return storage_pb2.UploadReply(success=False, message=f"Ditolak: {reason}")
 
-        path = os.path.join(DATA_DIR, "files", request.filename)
-        with open(path, "wb") as f:
-            f.write(request.content)
-
-        checksum = sha256_bytes(request.content)
-
-        meta = load_meta()
-        meta[request.filename] = {
-            "label": request.label or "Public",
-            "checksum": checksum,
-            "owner": username,
-        }
-        save_meta(meta)
-
-        print(f"[UPLOAD] {request.filename} by {username} label={request.label} sha256={checksum[:16]}...")
-        return storage_pb2.UploadReply(
-            success=True,
-            message="File tersimpan",
-            checksum=checksum,
+        reply = storage_client.upload_to_storage(
+            request.token, username, request.filename, request.content, request.label
         )
+        if reply is None:
+            return storage_pb2.UploadReply(success=False, message="Storage Node tidak dapat dihubungi (Primary & Backup down)")
+
+        print(f"[UPLOAD via Gateway] {request.filename} by {username} -> Storage: success={reply.success}")
+        return reply
 
     def Download(self, request, context):
-        meta = load_meta()
-        file_label = meta.get(request.filename, {}).get("label")
+        list_reply = storage_client.list_from_storage(request.token, request.username)
+        file_label = None
+        if list_reply is not None:
+            for f in list_reply.files:
+                if f.filename == request.filename:
+                    file_label = f.label
+                    break
 
         allowed, username, reason = policy.authorize(
             request.token, "download", request.filename, file_label
@@ -73,54 +41,31 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
         if not allowed:
             return storage_pb2.DownloadReply(success=False, message=f"Ditolak: {reason}")
 
-        if request.filename not in meta:
-            return storage_pb2.DownloadReply(success=False, message="File tidak ditemukan")
+        reply = storage_client.download_from_storage(request.token, username, request.filename)
+        if reply is None:
+            return storage_pb2.DownloadReply(success=False, message="Storage Node tidak dapat dihubungi (Primary & Backup down)")
 
-        path = os.path.join(DATA_DIR, "files", request.filename)
-        if not os.path.exists(path):
-            return storage_pb2.DownloadReply(success=False, message="File hilang di disk")
-
-        with open(path, "rb") as f:
-            content = f.read()
-
-        actual = sha256_bytes(content)
-        expected = meta[request.filename]["checksum"]
-
-        if actual != expected:
-            print(f"[INTEGRITY FAIL] {request.filename}")
-            return storage_pb2.DownloadReply(
-                success=False,
-                message="Integritas file rusak: SHA-256 tidak cocok",
-            )
-
-        print(f"[DOWNLOAD] {request.filename} by {username}")
-        return storage_pb2.DownloadReply(
-            success=True,
-            message="OK",
-            content=content,
-            checksum=actual,
-        )
+        print(f"[DOWNLOAD via Gateway] {request.filename} by {username}: success={reply.success}")
+        return reply
 
     def List(self, request, context):
         allowed, username, reason = policy.authorize(request.token, "list")
         if not allowed:
             return storage_pb2.ListReply()
 
-        meta = load_meta()
-        files = [
-            storage_pb2.FileInfo(
-                filename=name,
-                label=info["label"],
-                checksum=info["checksum"],
-                owner=info["owner"],
-            )
-            for name, info in meta.items()
-        ]
-        return storage_pb2.ListReply(files=files)
+        reply = storage_client.list_from_storage(request.token, username)
+        if reply is None:
+            return storage_pb2.ListReply()
+        return reply
 
     def Delete(self, request, context):
-        meta = load_meta()
-        file_label = meta.get(request.filename, {}).get("label")
+        list_reply = storage_client.list_from_storage(request.token, request.username)
+        file_label = None
+        if list_reply is not None:
+            for f in list_reply.files:
+                if f.filename == request.filename:
+                    file_label = f.label
+                    break
 
         allowed, username, reason = policy.authorize(
             request.token, "delete", request.filename, file_label
@@ -128,27 +73,40 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
         if not allowed:
             return storage_pb2.DeleteReply(success=False, message=f"Ditolak: {reason}")
 
-        if request.filename not in meta:
-            return storage_pb2.DeleteReply(success=False, message="File tidak ditemukan")
+        reply = storage_client.delete_from_storage(request.token, username, request.filename)
+        if reply is None:
+            return storage_pb2.DeleteReply(success=False, message="Storage Node tidak dapat dihubungi (Primary & Backup down)")
 
-        path = os.path.join(DATA_DIR, "files", request.filename)
-        if os.path.exists(path):
-            os.remove(path)
+        print(f"[DELETE via Gateway] {request.filename} by {username}: success={reply.success}")
+        return reply
 
-        del meta[request.filename]
-        save_meta(meta)
 
-        print(f"[DELETE] {request.filename} by {username}")
-        return storage_pb2.DeleteReply(success=True, message="File dihapus")
+def load_credentials():
+    base = os.path.join(os.path.dirname(__file__), "..", "certs")
+
+    with open(os.path.join(base, "gateway-key.pem"), "rb") as f:
+        private_key = f.read()
+    with open(os.path.join(base, "gateway-cert.pem"), "rb") as f:
+        certificate_chain = f.read()
+    with open(os.path.join(base, "ca-cert.pem"), "rb") as f:
+        root_cert = f.read()
+
+    return grpc.ssl_server_credentials(
+        [(private_key, certificate_chain)],
+        root_certificates=root_cert,
+        require_client_auth=True,
+    )
 
 
 def serve():
-    ensure_dirs()
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     storage_pb2_grpc.add_StorageServicer_to_server(GatewayServicer(), server)
-    server.add_insecure_port("[::]:50052")
+
+    credentials = load_credentials()
+    server.add_secure_port("[::]:50052", credentials)
+
     server.start()
-    print("Gateway server running on port 50052")
+    print("Gateway server running SECURELY (mTLS) on port 50052")
     server.wait_for_termination()
 
 

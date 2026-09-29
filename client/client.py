@@ -4,9 +4,8 @@ import sys
 import storage_pb2
 import storage_pb2_grpc
 
-TARGET = "localhost:50052"
+TARGET = "10.16.54.89:50052"
 
-# Simulasi "kartu identitas" tiap user, cocokkan dengan users.json di Gateway
 TOKENS = {
     "admin1": "token-admin-123",
     "budi": "token-budi-456",
@@ -15,7 +14,23 @@ TOKENS = {
 
 
 def get_stub():
-    channel = grpc.insecure_channel(TARGET)
+    import os
+    base = os.path.join(os.path.dirname(__file__), "..", "ca certificate")
+
+    with open(os.path.join(base, "client-key.pem"), "rb") as f:
+        private_key = f.read()
+    with open(os.path.join(base, "client-cert.pem"), "rb") as f:
+        certificate_chain = f.read()
+    with open(os.path.join(base, "ca-cert.pem"), "rb") as f:
+        root_cert = f.read()
+
+    credentials = grpc.ssl_channel_credentials(
+        root_certificates=root_cert,
+        private_key=private_key,
+        certificate_chain=certificate_chain,
+    )
+
+    channel = grpc.secure_channel(TARGET, credentials)
     return storage_pb2_grpc.StorageStub(channel)
 
 
