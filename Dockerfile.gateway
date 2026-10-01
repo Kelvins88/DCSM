@@ -1,0 +1,7 @@
+FROM python:3.11-slim
+WORKDIR /app
+RUN pip install --no-cache-dir grpcio protobuf
+COPY gateway/ ./gateway/
+COPY certs/ ./certs/
+EXPOSE 50052
+CMD ["python", "-u", "gateway/gateway_server.py"]

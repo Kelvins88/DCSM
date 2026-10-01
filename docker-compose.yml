@@ -1,0 +1,41 @@
+services:
+  storage-primary:
+    build:
+      context: "./ca certificate/storage-primary"
+    container_name: storage-primary
+    environment:
+      - STORAGE_ROLE=primary
+      - STORAGE_PORT=50053
+      - REPLICATE_TO=storage-backup:50053
+    networks:
+      - dcsm-net
+
+  storage-backup:
+    build:
+      context: "./ca certificate/storage-backup"
+    container_name: storage-backup
+    environment:
+      - STORAGE_ROLE=backup
+      - STORAGE_PORT=50053
+    networks:
+      - dcsm-net
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    container_name: gateway
+    depends_on:
+      - storage-primary
+      - storage-backup
+    environment:
+      - STORAGE_PRIMARY_TARGET=storage-primary:50053
+      - STORAGE_BACKUP_TARGET=storage-backup:50053
+    ports:
+      - "50052:50052"
+    networks:
+      - dcsm-net
+
+networks:
+  dcsm-net:
+    driver: bridge
