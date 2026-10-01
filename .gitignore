@@ -6,3 +6,4 @@ certs/*.key
 certs/*.pem
 audit_log.jsonl
 downloaded_test.txt
+logs/

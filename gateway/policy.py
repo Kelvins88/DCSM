@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timezone
 
 USERS_FILE = os.path.join(os.path.dirname(__file__), "..", "users.json")
-AUDIT_LOG_FILE = os.path.join(os.path.dirname(__file__), "..", "audit_log.jsonl")
+AUDIT_LOG_FILE = os.environ.get("AUDIT_LOG_FILE", os.path.join(os.path.dirname(__file__), "..", "audit_log.jsonl"))
 
 # Urutan level, dari rendah ke tinggi
 LEVELS = {"Public": 0, "Confidential": 1, "Secret": 2}

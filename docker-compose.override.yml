@@ -1,0 +1,6 @@
+services:
+  gateway:
+    environment:
+      - AUDIT_LOG_FILE=/app/logs/audit_log.jsonl
+    volumes:
+      - ./logs:/app/logs
