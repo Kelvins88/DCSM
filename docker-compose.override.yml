@@ -1,6 +1,30 @@
 services:
+  storage-primary:
+    build:
+      context: ./storage/storage-primary
+    environment:
+      - CERT_DIR=/certs
+      - DATA_DIR=/data
+    volumes:
+      - ./storage/storage-primary/certs:/certs:ro
+      - primary-data:/data
+
+  storage-backup:
+    build:
+      context: ./storage/storage-backup
+    environment:
+      - CERT_DIR=/certs
+      - DATA_DIR=/data
+    volumes:
+      - ./storage/storage-backup/certs:/certs:ro
+      - backup-data:/data
+
   gateway:
     environment:
       - AUDIT_LOG_FILE=/app/logs/audit_log.jsonl
     volumes:
       - ./logs:/app/logs
+
+volumes:
+  primary-data:
+  backup-data:
