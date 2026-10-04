@@ -1,0 +1,11 @@
+services:
+  storage-primary:
+    ports:
+      - "50053:50053"
+  storage-backup:
+    ports:
+      - "50054:50053"
+  gateway:
+    environment:
+      - STORAGE_PRIMARY_TARGET=10.16.54.46:50053
+      - STORAGE_BACKUP_TARGET=10.16.54.46:50054
