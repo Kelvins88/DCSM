@@ -60,7 +60,21 @@ class GatewayServicer(storage_pb2_grpc.StorageServicer):
         reply = storage_client.list_from_storage(request.token, username)
         if reply is None:
             return storage_pb2.ListReply()
-        return reply
+
+        # Bell-LaPadula (no read-up): hanya tampilkan berkas dengan label
+        # setara atau di bawah clearance pengguna
+        _, info = policy.find_user_by_token(request.token)
+        clearance = info["clearance"]
+        visible = [
+            f for f in reply.files
+            if policy.check_bell_lapadula(clearance, f.label, "list")
+        ]
+
+        filtered = storage_pb2.ListReply()
+        filtered.CopyFrom(reply)
+        del filtered.files[:]
+        filtered.files.extend(visible)
+        return filtered
 
     def Delete(self, request, context):
         list_reply = storage_client.list_from_storage(request.token, request.username)
