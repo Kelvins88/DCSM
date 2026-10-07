@@ -89,3 +89,5 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-co
 ## Catatan Keamanan
 
 Seluruh token dan kunci pada repository ini adalah data uji untuk keperluan tugas kuliah, tidak untuk lingkungan produksi. Audit log Gateway tersimpan di `logs/audit_log.jsonl`.
+
+Catatan: kunci uji Gateway (certs/gateway-key.pem) sudah disertakan pada repository publik ini, sehingga langkah penyiapan manual folder certs/ di atas tidak diperlukan. Seluruh kunci hanya untuk pengujian.
